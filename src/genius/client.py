@@ -1,6 +1,3 @@
-import pandas as pd
-import numpy as np
-from sentence_transformers import SentenceTransformer
 from bs4 import BeautifulSoup
 import requests
 import re
@@ -23,6 +20,10 @@ class GeniusClient:
             params = {'q': f'{track} {artist}'}
             response = requests.get(search_url, headers=headers, params=params).json()
             hits = response['response']['hits']
+            if len(hits) == 0:
+                all_urls.append(None)
+                continue
+
             url = hits[0]['result']['url']
 
             all_urls.append(url)
@@ -33,6 +34,10 @@ class GeniusClient:
         all_lyrics = []
 
         for url in urls:
+            if url is None:
+                all_lyrics.append(None)
+                continue
+
             response = requests.get(url)
             soup = BeautifulSoup(response.text, 'html.parser')
             divs = soup.find_all('div', class_=re.compile(r'^Lyrics__Container-sc'))
@@ -41,18 +46,6 @@ class GeniusClient:
             lyrics = re.split(r'\[[^\]]+\]', text[text.find('['):])
             verses = [verse.strip() for verse in lyrics if verse.strip()]
 
-            all_lyrics.append(verses)
+            all_lyrics.append(verses if verses else None)
         
         return all_lyrics
-    
-    def get_songs_embeddings(self, lyrics):
-        all_embeddings = []
-        model = SentenceTransformer('distiluse-base-multilingual-cased-v2', device='mps')
-        model_dim = model.get_sentence_embedding_dimension()
-
-        for verses in lyrics:
-            verse_embeddings = model.encode(verses, batch_size=64)
-            song_embeddings = np.mean(verse_embeddings, axis=0)
-            all_embeddings.append(song_embeddings)
-
-        return pd.DataFrame(all_embeddings, columns=[f'emb_{i}' for i in range(model_dim)])
